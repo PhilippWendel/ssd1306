@@ -1,0 +1,3 @@
+[submodule "deps/microchip-atmega"]
+	path = deps/microchip-atmega
+	url = https://github.com/PhilippWendel/microchip-atmega

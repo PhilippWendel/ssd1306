@@ -6,7 +6,7 @@ const microzig = @import("deps/microchip-atmega/deps/microzig/build.zig");
 
 pub fn build(b: *std.build.Builder) !void {
     const optimize = b.standardOptimizeOption(.{});
-    var exe = microzig.addEmbeddedExecutable( b, .{
+    var exe = microzig.addEmbeddedExecutable(b, .{
         .name = "my-executable",
         .source_file = .{
             .path = "src/main.zig",

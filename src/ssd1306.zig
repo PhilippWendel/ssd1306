@@ -1,3 +1,22 @@
+const std = @import("std");
+
+// Design
+// pass device or writer/reader
+pub fn SSD1306() type {
+    return struct {
+        pub fn init(wt: anytype) !type {
+            return Struct{
+                wt = wt,
+                pub fn deinit() void {
+                    Self.wt.stop() catch {};
+                }
+                fn write(data: []const u8) !void {
+                    try Self.wt.writer().writeAll(data);
+                }
+            };
+        }
+    };
+}
 const ControlByte = struct {
     Co: u1, //Continuation bit
     @"D/C#": u1, // Data / Command Selection bit

@@ -2,6 +2,7 @@ const std = @import("std");
 const microzig = @import("microzig");
 const interfaces = microzig.core.experimental;
 const fc = @import("ssd1306.zig").FundamentalCommands;
+const SSD1306 = @import("ssd1306.zig").SSD1306;
 // `microzig.config`: comptime access to configuration
 // `microzig.chip`: access to register definitions, generated code
 // `microzig.board`: access to board information
@@ -48,11 +49,10 @@ pub fn main() !void {
     var contrast: u8 = 255;
     while (true) {
         {
-            var wt = try ssd1306.start_transfer(.write);
-            defer wt.stop() catch {};
+            const ssd1306_driver = try SSD1306().init(ssd1306.start_transfer(.write));
+            defer ssd1306_driver.deinit();
             const c = fc.asBytes(fc.SetContrastControll);
-            try wt.writer().writeAll(&.{ c[0], c[1], contrast });
-            try wt.writer().writeByte(contrast);
+            try ssd1306_driver.write(&.{ c[0], c[1], contrast });
         }
         contrast = if (contrast == 255) 10 else 255;
 

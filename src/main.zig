@@ -1,8 +1,7 @@
 const std = @import("std");
 const microzig = @import("microzig");
 const interfaces = microzig.core.experimental;
-const fc = @import("ssd1306.zig").FundamentalCommands;
-const SSD1306 = @import("ssd1306.zig").SSD1306;
+const SSD1306 = @import("ssd1306.zig");
 // `microzig.config`: comptime access to configuration
 // `microzig.chip`: access to register definitions, generated code
 // `microzig.board`: access to board information
@@ -19,51 +18,36 @@ pub fn main() !void {
     try uart.writer().writeAll("Hello microzig!\r\n");
 
     const i2c = try interfaces.i2c.I2CController(0, .{}).init(.{ .target_speed = 100_000 });
-    try uart.writer().writeAll("Hello microzig!\r\n");
     const ssd1306 = i2c.device(0x3C);
+    try uart.writer().writeAll("Created I2C!\r\n");
 
-    {
-        var wt = try ssd1306.start_transfer(.write);
-        defer wt.stop() catch {};
-        try wt.writer().writeAll(&.{ 0x00, 0xAE, 0xD5, 0x80, 0xA8 });
+    // zig fmt: off
+    try write_i2c(ssd1306, &.{
+        0x00, 0xAE, 0xD5, 0x80, 0xA8, 0x00, 0xAE, 0xD5,
+        0x80, 0x0A, 0x00, 0x01, 0x00, 0xD3, 0x00, 0x40,
+        0x08, 0x00, 0x01, 0x00, 0x20, 0x00, 0xA1, 0x0C,
+        0x00, 0x0D, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08,
+        0x00, 0x0D, 0x00, 0x0F, 0x00, 0xDB, 0x40, 0xA4,
+        0xA6, 0x2E, 0x0A, 0x00, 0x22, 0x00, 0xFF, 0x21,
+        0x00, 0x00, 0x07, 0x40, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0xE0,
+        0xF0, 0xFC, 0xFE, 0xFF, 0xFF, 0xF8, 0xC0, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0xAE, 0xD5, 0x80, 0xA8
+    });
+    // zig fmt: on
 
-        try wt.writer().writeAll(&.{ 0x00, 0xAE, 0xD5, 0x80, 0xA8 });
-        try wt.writer().writeAll(&.{ 0x00, 0x1F });
-        try wt.writer().writeAll(&.{ 0x00, 0xD3, 0x00, 0x40, 0x8D });
-        try wt.writer().writeAll(&.{ 0x00, 0x14 });
-        try wt.writer().writeAll(&.{ 0x00, 0x20, 0x00, 0xA1, 0xC8 });
-        try wt.writer().writeAll(&.{ 0x00, 0xDA });
-        try wt.writer().writeAll(&.{ 0x00, 0x02 });
-        try wt.writer().writeAll(&.{ 0x00, 0x81 });
-        try wt.writer().writeAll(&.{ 0x00, 0x8F });
-        try wt.writer().writeAll(&.{ 0x00, 0xD9 });
-        try wt.writer().writeAll(&.{ 0x00, 0xF1 });
-        try wt.writer().writeAll(&.{ 0x00, 0xDB, 0x40, 0xA4, 0xA6, 0x2E, 0xAF });
-        try wt.writer().writeAll(&.{ 0x00, 0x22, 0x00, 0xFF, 0x21, 0x00 });
-        try wt.writer().writeAll(&.{ 0x00, 0x7F });
-        try wt.writer().writeAll(&.{ 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0xE0, 0xF0, 0xFC, 0xFE, 0xFF, 0xFF, 0xF8, 0xC0, 0x00, 0x00, 0x00, 0x00 });
-        try wt.writer().writeAll(&.{ 0x00, 0xAE, 0xD5, 0x80, 0xA8 });
-    }
-
-    var state = fc.DisplayOn;
+    const FC = SSD1306.FC;
+    var state = FC.DisplayOn;
     var contrast: u8 = 255;
     while (true) {
-        {
-            const ssd1306_driver = try SSD1306().init(ssd1306.start_transfer(.write));
-            defer ssd1306_driver.deinit();
-            const c = fc.asBytes(fc.SetContrastControll);
-            try ssd1306_driver.write(&.{ c[0], c[1], contrast });
-        }
+        try write_i2c(ssd1306, &SSD1306.setContrast(contrast));
         contrast = if (contrast == 255) 10 else 255;
 
         busyloop(1_000_000);
         try uart.writer().print("Display {}\r\n", .{state});
-        {
-            var wt = try ssd1306.start_transfer(.write);
-            defer wt.stop() catch {};
-            try wt.writer().writeAll(&fc.asBytes(state));
-        }
-        state = if (state == fc.DisplayOff) fc.DisplayOn else fc.DisplayOff;
+        try write_i2c(ssd1306, &SSD1306.displayOn());
+        state = if (state == FC.DisplayOff) FC.DisplayOn else FC.DisplayOff;
     }
 }
 
@@ -72,4 +56,10 @@ fn busyloop(limit: u24) void {
     while (i < limit) : (i += 1) {
         asm volatile ("nop");
     }
+}
+
+fn write_i2c(i2c_device: anytype, data: []const u8) !void {
+    var wt = try i2c_device.start_transfer(.write);
+    defer wt.stop() catch {};
+    try wt.writer().writeAll(data);
 }

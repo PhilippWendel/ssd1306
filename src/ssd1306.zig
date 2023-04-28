@@ -1,32 +1,9 @@
 const std = @import("std");
 
-// Design
-// pass device or writer/reader
-pub fn SSD1306() type {
-    return struct {
-        pub fn init(wt: anytype) !type {
-            return Struct{
-                wt = wt,
-                pub fn deinit() void {
-                    Self.wt.stop() catch {};
-                }
-                fn write(data: []const u8) !void {
-                    try Self.wt.writer().writeAll(data);
-                }
-            };
-        }
-    };
-}
-const ControlByte = struct {
-    Co: u1, //Continuation bit
-    @"D/C#": u1, // Data / Command Selection bit
-    six_0: u6 = 0,
-};
-
-const data_bytes_only = ControlByte{ .Co = 0, .@"D/C#" = 1 };
+const command: u8 = 0x00;
 
 // [1, p. 28]
-pub const FundamentalCommands = enum(u8) {
+pub const FC = enum(u8) {
     /// Double byte command to select 1 out of 256 contrast steps.
     /// Contrast increases as the value increases.
     /// (RESET = 7Fh )
@@ -47,10 +24,44 @@ pub const FundamentalCommands = enum(u8) {
     DisplayOff = 0xAE,
     /// Display ON in normal mode
     DisplayOn = 0xAF,
-    pub fn asBytes(command: FundamentalCommands) [2]u8 {
-        return [_]u8{ 0x00, @enumToInt(command) };
-    }
 };
+
+pub fn setContrast(c: u8) [3]u8 {
+    return [_]u8{ command, @enumToInt(FC.SetContrastControll), c };
+}
+
+pub fn displayOn() [2]u8 {
+    return [_]u8{ command, @enumToInt(FC.DisplayOn) };
+}
+
+pub fn displayOff() [2]u8 {
+    return [_]u8{ command, @enumToInt(FC.DisplayOff) };
+}
+
+const AddressingMode = enum {
+    page,
+    horizontal,
+    vertical,
+};
+pub fn addressingMode(mode: AddressingMode) [2]u8 {
+    return switch (mode) {
+        .page => [_]u8{
+            0x20, 0b100
+        },
+        .horizontal => [_]u8{
+            0x20, 0x00
+        },
+        .vertical => [_]u8{
+            0x20, 0x01
+        },
+    };
+}
+
+pub fn verticalAddressing() [2]u8 {
+    return [_]u8{
+        0x20,
+    };
+}
 
 // References:
 // [1] https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf

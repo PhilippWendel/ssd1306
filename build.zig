@@ -10,7 +10,7 @@ pub fn build(b: *std.build.Builder) !void {
     // Tests
     const unit_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/ssd1306.test.zig" },
-        .target =  b.standardTargetOptions(.{}),
+        .target = b.standardTargetOptions(.{}),
         .optimize = optimize,
     });
     const run_unit_tests = b.addRunArtifact(unit_tests);

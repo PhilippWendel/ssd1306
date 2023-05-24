@@ -27,21 +27,22 @@ pub const FC = enum(u8) {
     DisplayOn = 0xAF,
 };
 
-pub fn init() [38]u8 {
-    return [_]u8{
-        command, 0xAE, // Display OFF (sleep mode)
-        command, 0xA8, command, 0x3F, // Set MUX Ratio
-        command, 0xD3, command, 0x00, // Set Display Offset
-        command, 0x40, // Set Display Start Line
-        command, 0xA0, // Set Segment remap
-        command, 0xC0, // Set COM Output Scan Direction
-        command, 0xDA, command, 0x02, // Set COM Pins hardware configuration
-        command, 0x81, command, 0x7F, // Set Contrast Control
-        command, 0xA4, // Disable Entire Display On
-        command, 0xA6, // Set Normal Display
-        command, 0xD5, command, 0x80, // Set Osc Frequency
-        command, 0x8D, command, 0x14, // Enable charge pump regulator
-        command, 0xAF, // Display On
+pub fn init() [14][]const u8 {
+    return [_] []const u8{
+        &[_]u8{ 0x00, 0xAE, 0xD5, 0x80, 0xA8 },
+        &[_]u8{ 0x00, 0x1F },
+        &[_]u8{ 0x00, 0xD3, 0x00, 0x40, 0x8D },
+        &[_]u8{ 0x00, 0x14 },
+        &[_]u8{ 0x00, 0x20, 0x00, 0xA1, 0xC8 },
+        &[_]u8{ 0x00, 0xDA },
+        &[_]u8{ 0x00, 0x02 },
+        &[_]u8{ 0x00, 0x81 },
+        &[_]u8{ 0x00, 0x8F },
+        &[_]u8{ 0x00, 0xD9 },
+        &[_]u8{ 0x00, 0xF1 },
+        &[_]u8{ 0x00, 0xDB, 0x40, 0xA4, 0xA6, 0x2E, 0xAF },
+        &[_]u8{ 0x00, 0x22, 0x00, 0xFF, 0x21, 0x00 },
+        &[_]u8{ 0x00, 0x7F },
     };
 }
 

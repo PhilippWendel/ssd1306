@@ -22,20 +22,22 @@ pub fn main() !void {
     try uart.writer().writeAll("Created I2C!\r\n");
 
     var contrast: u8 = 255;
-    try write_i2c(ssd1306, &SSD1306.init());
-    try write_i2c(ssd1306, &SSD1306.addressingMode(.page));
-    try write_i2c(ssd1306, &try SSD1306.setColumnStartAndEndAddress(0, 127)); // Set column start/end addresses, Start column = 0, End column = 127
-    try write_i2c(ssd1306, &try SSD1306.setColumnStartAndEndAddress(0, 7)); // Set page start/end addresses, Start page = 0, End page = 7
+    // try write_i2c(ssd1306, &SSD1306.addressingMode(.page));
+    // try write_i2c(ssd1306, &try SSD1306.setColumnStartAndEndAddress(0, 127)); // Set column start/end addresses, Start column = 0, End column = 127
+    // try write_i2c(ssd1306, &try SSD1306.setColumnStartAndEndAddress(0, 7)); // Set page start/end addresses, Start page = 0, End page = 7
 
-    try write_i2c(ssd1306, &[_]u8{ 0x00, 0xb0, 0, 0x7f }); 
-    const all_white =  &[_]u8{0x40} ++ &[_]u8{0xF0} ** (128/8) ++ &[_]u8{ 0x00, 0xA4 };
-    try write_i2c(ssd1306, all_white); // Display all white
-    try uart.writer().print("{s}\r\n", .{std.fmt.fmtSliceHexLower(all_white)});
+    // Init
+    for(SSD1306.init()) |data| {
+        try write_i2c(ssd1306, data);
+    }
+    // Data
+    try write_i2c(ssd1306, &[_]u8{0x40} ++ &[_]u8{0xFF} ** 512);
+
     busyloop(1_000_000);
     try uart.writer().writeAll("Loop\r\n");
     while (true) {
         try write_i2c(ssd1306, &SSD1306.setContrast(contrast));
-        contrast = if (contrast == 255) 10 else 255;
+        contrast = if (contrast == 255) 1 else 255;
         busyloop(1_000_000);
         try write_i2c(ssd1306, &SSD1306.display(.inverse));
         busyloop(1_000_000);

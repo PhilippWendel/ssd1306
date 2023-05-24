@@ -27,7 +27,7 @@ pub fn main() !void {
     // try write_i2c(ssd1306, &try SSD1306.setColumnStartAndEndAddress(0, 7)); // Set page start/end addresses, Start page = 0, End page = 7
 
     // Init
-    for(SSD1306.init()) |data| {
+    for (SSD1306.init()) |data| {
         try write_i2c(ssd1306, data);
     }
     // Data

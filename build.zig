@@ -6,6 +6,17 @@ const microzig = @import("deps/microchip-atmega/deps/microzig/build.zig");
 
 pub fn build(b: *std.build.Builder) !void {
     const optimize = b.standardOptimizeOption(.{});
+
+    // Tests
+    const unit_tests = b.addTest(.{
+        .root_source_file = .{ .path = "src/ssd1306.test.zig" },
+        .target =  b.standardTargetOptions(.{}),
+        .optimize = optimize,
+    });
+    const run_unit_tests = b.addRunArtifact(unit_tests);
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&run_unit_tests.step);
+
     var exe = microzig.addEmbeddedExecutable(b, .{
         .name = "my-executable",
         .source_file = .{

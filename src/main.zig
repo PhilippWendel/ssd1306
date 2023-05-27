@@ -19,10 +19,10 @@ pub fn main() !void {
     try uart.writer().writeAll("Hallo Welt\r\n");
 
     const ssd1306 = SSD1306(I2C_Writer(0x3C, 100_000).writer());
-    try ssd1306.init();
+    // try ssd1306.init();
     try uart.writer().writeAll("Init\r\n");
-    const bitmap = &[_]u8{0x40} ++ &[_]u8{0xF0} ** 512;
-    try ssd1306.wt.writeAll(bitmap);
+    // const bitmap = &[_]u8{0x40} ++ &[_]u8{0xF0} ** 512;
+    // try ssd1306.wt.writeAll(bitmap);
 
     var contrast: u8 = 255;
     while (true) {
@@ -30,9 +30,17 @@ pub fn main() !void {
         try ssd1306.setContrast(contrast);
         contrast = if (contrast == 255) 1 else 255;
         busyloop(1_000_000);
-        try ssd1306.display(.inverse);
+        try ssd1306.setDisplay(.off);
         busyloop(1_000_000);
-        try ssd1306.display(.normal);
+        try ssd1306.setDisplay(.on);
+        busyloop(1_000_000);
+        try ssd1306.setNormalOrInverseDisplay(.inverse);
+        busyloop(1_000_000);
+        try ssd1306.setNormalOrInverseDisplay(.normal);
+        busyloop(1_000_000);
+        try ssd1306.entireDisplayOn(.resumeToRam);
+        busyloop(1_000_000);
+        try ssd1306.entireDisplayOn(.ignoreRam);
         busyloop(1_000_000);
     }
 }

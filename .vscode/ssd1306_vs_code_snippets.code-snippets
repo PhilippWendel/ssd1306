@@ -10,10 +10,9 @@
 		"scope": "zig",
 		"prefix": "sf",
 		"body": [
-			"pub fn $1(self: Self, byte: u8$2) !void {",
+			"pub fn $1(self: Self, $2) !void {",
 			"    $3try self.wt.writeAll(&[_]u8{",
-			"        @bitcast(u8, ControllByte{ .Co = 1, .@\"D/C#\"=1}),",
-			"        byte,$4",
+			"        @bitCast(u8, ControlByte{}),$4",
 			"    });",
 			"}",
 		],

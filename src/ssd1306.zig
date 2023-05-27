@@ -12,11 +12,7 @@ fn SSD1306Struct(comptime WriterType: type) type {
 
         // Fundamental Commands
         pub fn setContrast(self: Self, contrast: u8) !void {
-            try self.wt.writeAll(&[_]u8{
-                @bitCast(u8, ControlByte{}),
-                0x81,
-                contrast,
-            });
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x81, contrast });
         }
 
         pub fn entireDisplayOn(self: Self, mode: DisplayOnMode) !void {
@@ -32,7 +28,47 @@ fn SSD1306Struct(comptime WriterType: type) type {
         }
 
         // Scrolling Commands
+        pub fn continuousHorizontalScrollSetup(self: Self, direction: HorizontalScrollDirection, start_page: u3, end_page: u3, frame_frequency: u3) !void {
+            if (end_page < start_page) return PageError.EndPageIsSmallerThanStartPage;
+            try self.wt.writeAll(&[_]u8{
+                @bitCast(u8, ControlByte{}),
+                @enumToInt(direction),
+                0x00, // Dummy byte
+                @as(u8, start_page),
+                @as(u8, frame_frequency),
+                @as(u8, end_page),
+                0x00, // Dummy byte
+                0xFF, // Dummy byte
+            });
+        }
 
+        pub fn continuousVerticalAndHorizontalScrollSetup(self: Self, direction: VerticalAndHorizontalScrollDirection, start_page: u3, end_page: u3, frame_frequency: u3, vertical_scrolling_offset: u6) !void {
+            try self.wt.writeAll(&[_]u8{
+                @bitCast(u8, ControlByte{}),
+                @enumToInt(direction),
+                0x00, // Dummy byte
+                @as(u8, start_page),
+                @as(u8, frame_frequency),
+                @as(u8, end_page),
+                @as(u8, vertical_scrolling_offset),
+            });
+        }
+
+        pub fn deactivateScroll(self: Self) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x2E });
+        }
+
+        pub fn activateScroll(self: Self) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x2F });
+        }
+
+        pub fn setVerticalScrollArea(self: Self, start_row: u6, num_of_rows: u7) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xA3, @as(u8, start_row), @as(u8, num_of_rows) });
+        }
+
+        // TODO(philippwendel) Addressing Setting Commands
+
+        // TODO(philippwendel) Hardware Configuration Commands
     };
 }
 
@@ -42,12 +78,17 @@ const ControlByte = packed struct(u8) {
     unused: u6 = 0,
 };
 
+// Fundamental Commands
 const DisplayOnMode = enum(u8) { resumeToRam = 0xA4, ignoreRam = 0xA5 };
 const NormalOrInverseDisplay = enum(u8) { normal = 0xA6, inverse = 0xA7 };
 const DisplayMode = enum(u8) { off = 0xAE, on = 0xAF };
 
-// References:
-// [1] https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
+// Scrolling Commands
+const HorizontalScrollDirection = enum(u8) { right = 0x26, left = 0x27 };
+const VerticalAndHorizontalScrollDirection = enum(u8) { right = 0x29, left = 0x2A };
+const PageError = error{
+    EndPageIsSmallerThanStartPage,
+};
 
 // Tests
 
@@ -109,3 +150,66 @@ test "setDisplay" {
 }
 
 // Scrolling Commands
+// TODO(philippwendel) Test more values and error
+test "continuousHorizontalScrollSetup" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0x26, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.continuousHorizontalScrollSetup(.right, 0, 0, 0);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+test "continuousVerticalAndHorizontalScrollSetup" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0x29, 0x00, 0x01, 0x3, 0x2, 0x4 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.continuousVerticalAndHorizontalScrollSetup(.right, 1, 2, 3, 4);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+test "deactivateScroll" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0x2E };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.deactivateScroll();
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+test "activateScroll" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0x2F };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.activateScroll();
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+test "setVerticalScrollArea" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0xA3, 0x00, 0x0F };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.setVerticalScrollArea(0, 15);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+// References:
+// [1] https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf

@@ -8,7 +8,7 @@
 	// Example:
 	"SSD1306Struct_Funktion": {
 		"scope": "zig",
-		"prefix": "swt",
+		"prefix": "sf",
 		"body": [
 			"pub fn $1(self: Self, byte: u8$2) !void {",
 			"    $3try self.wt.writeAll(&[_]u8{",
@@ -18,5 +18,24 @@
 			"}",
 		],
 		"description": "Function shortcut for SSD1306Struct"
+	},
+	"SSD1306Struct_Test": {
+		"scope": "zig",
+		"prefix": "st",
+		"body": [
+			"test \"$1\" {",
+			"	// Arrange",
+			"	var output = std.ArrayList(u8).init(std.testing.allocator);",
+			"	defer output.deinit();",
+			"	const expected_data = &[_]u8{ $3 };",
+			"	// Act",
+			"	const ssd1306 = SSD1306(output.writer());",
+			"	try ssd1306.$2();",
+			"	// Assert",
+			"	try std.testing.expectEqualSlices(u8, output.items, expected_data);",
+			"}",
+			
+		],
+		"description": "Test shortcut for SSD1306"
 	}
 }

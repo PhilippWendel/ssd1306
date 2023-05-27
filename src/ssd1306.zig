@@ -1,7 +1,105 @@
 const std = @import("std");
 
-const command: u8 = 0x00;
-const data: u8 = 0x40;
+pub fn SSD1306(writer: anytype) SSD1306Struct(@TypeOf(writer)) {
+    return .{ .wt = writer };
+}
+
+fn SSD1306Struct(comptime WriterType: type) type {
+    return struct {
+        const Self = @This();
+        wt: WriterType,
+
+        pub fn init(self: Self) !void {
+            if (true) {
+                const init_commands = [_][]const u8{
+                    &[_]u8{ 0x00, 0xAE, 0xD5, 0x80, 0xA8 },
+                    &[_]u8{ 0x00, 0x1F },
+                    &[_]u8{ 0x00, 0xD3, 0x00, 0x40, 0x8D },
+                    &[_]u8{ 0x00, 0x14 },
+                    &[_]u8{ 0x00, 0x20, 0x00, 0xA1, 0xC8 },
+                    &[_]u8{ 0x00, 0xDA },
+                    &[_]u8{ 0x00, 0x02 },
+                    &[_]u8{ 0x00, 0x81 },
+                    &[_]u8{ 0x00, 0x8F },
+                    &[_]u8{ 0x00, 0xD9 },
+                    &[_]u8{ 0x00, 0xF1 },
+                    &[_]u8{ 0x00, 0xDB, 0x40, 0xA4, 0xA6, 0x2E, 0xAF },
+                    &[_]u8{ 0x00, 0x22, 0x00, 0xFF, 0x21, 0x00 },
+                    &[_]u8{ 0x00, 0x7F },
+                };
+                for (init_commands) |c| {
+                    try self.wt.writeAll(c);
+                }
+            } else {
+                // 00 DA 00 02 00 81 00 8F 00 D9 00 F1 00 DB 40 A4 A6 2E AF 00 22 00 FF 21 00 00 7F
+                try self.display(.off); // 00 AE
+                try self.setDisplayClockDivideAndOscillatorFrequency(0x80); // D5 80
+                try self.setMultiplexRatio(15); // A8 00
+                try self.setHigherColumnStartAddressForPageAddressingMode(0xF); // 00 1F
+                try self.setDisplayOffset(0); // 00 D3 00
+                try self.setDisplayStartLine(0); // 40
+                // D8 ???
+                try self.setHigherColumnStartAddressForPageAddressingMode(0x4); // 00 14
+                try self.addressingMode(.horizontal); // 00 20 00
+                try self.setSegmentRemap(.segTo127); // 00 A1
+                try self.setCOMOutputScanDirection(.remapped); // 00 C8
+            }
+        }
+
+        pub fn setContrast(self: Self, c: u8) !void {
+            try self.wt.writeAll(&[_]u8{ command, @enumToInt(FC.SetContrastControll), c });
+        }
+
+        const DisplayState = enum { on, off, normal, inverse };
+        pub fn display(self: Self, state: DisplayState) !void {
+            try self.wt.writeAll(&[_]u8{ command, switch (state) {
+                .on => @enumToInt(FC.DisplayOn),
+                .off => @enumToInt(FC.DisplayOff),
+                .normal => 0xa6,
+                .inverse => 0xa7,
+            } });
+        }
+        //TODO(philippwendel) make each into own function and split input or make union
+        pub fn setDisplayClockDivideAndOscillatorFrequency(self: Self, c: u8) !void {
+            try self.wt.writeAll(&[_]u8{ command, 0xD5, c });
+        }
+        pub fn setMultiplexRatio(self: Self, c: u5) !void {
+            if (c <= 14) return error.InvalidEntry;
+            try self.wt.writeAll(&[_]u8{ command, 0xA8, c });
+        }
+        pub fn setHigherColumnStartAddressForPageAddressingMode(self: Self, c: u4) !void {
+            var byte = 0b0001_0000 | @as(u8, c);
+            try self.wt.writeAll(&[_]u8{ command, byte });
+        }
+        pub fn setDisplayOffset(self: Self, c: u5) !void {
+            try self.wt.writeAll(&[_]u8{ command, 0xD3, c });
+        }
+        pub fn setDisplayStartLine(self: Self, c: u6) !void {
+            var byte = 0x40 | @as(u8, c);
+            try self.wt.writeAll(&[_]u8{ command, byte });
+        }
+        const AddressingMode = enum { page, horizontal, vertical };
+        pub fn addressingMode(self: Self, mode: AddressingMode) !void {
+            try self.wt.writeAll(&[_]u8{ command, 0x20, switch (mode) {
+                .page => 0b10,
+                .horizontal => 0x00,
+                .vertical => 0x01,
+            } });
+        }
+        pub fn setSegmentRemap(self: Self, r: enum { segTo0, segTo127 }) !void {
+            try self.wt.writeAll(&[_]u8{ command, switch (r) {
+                .segTo0 => 0xA0,
+                .segTo127 => 0xA1,
+            } });
+        }
+        pub fn setCOMOutputScanDirection(self: Self, r: enum { normal, remapped }) !void {
+            try self.wt.writeAll(&[_]u8{ command, switch (r) {
+                .normal => 0xC0,
+                .remapped => 0xC8,
+            } });
+        }
+    };
+}
 
 // [1, p. 28]
 pub const FC = enum(u8) {
@@ -27,60 +125,6 @@ pub const FC = enum(u8) {
     DisplayOn = 0xAF,
 };
 
-pub fn init() [14][]const u8 {
-    return [_][]const u8{
-        &[_]u8{ 0x00, 0xAE, 0xD5, 0x80, 0xA8 },
-        &[_]u8{ 0x00, 0x1F },
-        &[_]u8{ 0x00, 0xD3, 0x00, 0x40, 0x8D },
-        &[_]u8{ 0x00, 0x14 },
-        &[_]u8{ 0x00, 0x20, 0x00, 0xA1, 0xC8 },
-        &[_]u8{ 0x00, 0xDA },
-        &[_]u8{ 0x00, 0x02 },
-        &[_]u8{ 0x00, 0x81 },
-        &[_]u8{ 0x00, 0x8F },
-        &[_]u8{ 0x00, 0xD9 },
-        &[_]u8{ 0x00, 0xF1 },
-        &[_]u8{ 0x00, 0xDB, 0x40, 0xA4, 0xA6, 0x2E, 0xAF },
-        &[_]u8{ 0x00, 0x22, 0x00, 0xFF, 0x21, 0x00 },
-        &[_]u8{ 0x00, 0x7F },
-        // &[_]u8{ command, 0xA8, 0x3F },
-        // &[_]u8{ command, 0xD3, 0x00 },
-        // &[_]u8{ command, 0x40 },
-        // &[_]u8{ command, 0xA1 },
-        // &[_]u8{ command, 0xC8 },
-        // &[_]u8{ command, 0xDA, 0x02 },
-        // &[_]u8{ command, 0x81, 0x7F },
-        // &[_]u8{ command, 0xA4 },
-        // &[_]u8{ command, 0xA6 },
-        // &[_]u8{ command, 0xD5, 0x80 },
-        // &[_]u8{ command, 0x8D, 0x14 },
-        // &[_]u8{ command, 0xAF },
-    };
-}
-
-pub fn setContrast(c: u8) [3]u8 {
-    return [_]u8{ command, @enumToInt(FC.SetContrastControll), c };
-}
-
-const DisplayState = enum { on, off, normal, inverse };
-pub fn display(state: DisplayState) [2]u8 {
-    return switch (state) {
-        .on => [_]u8{ command, @enumToInt(FC.DisplayOn) },
-        .off => [_]u8{ command, @enumToInt(FC.DisplayOff) },
-        .normal => [_]u8{ command, 0xa6 },
-        .inverse => [_]u8{ command, 0xa7 },
-    };
-}
-
-const AddressingMode = enum { page, horizontal, vertical };
-pub fn addressingMode(mode: AddressingMode) [3]u8 {
-    return [_]u8{ command, 0x20 } ++ switch (mode) {
-        .page => [_]u8{0b10},
-        .horizontal => [_]u8{0x00},
-        .vertical => [_]u8{0x01},
-    };
-}
-
 const Address = error{ StartToLarge, EndToLarge };
 
 pub fn setColumnStartAndEndAddress(start: u8, end: u8) Address![6]u8 {
@@ -102,10 +146,13 @@ pub fn setPageStartAndEndAddress(start: u8, end: u8) Address![6]u8 {
     };
 }
 
+// Constants
+const command: u8 = 0x00;
+const data: u8 = 0x40;
+
 // References:
 // [1] https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
 
-// Tests
 test "constants" {
     try std.testing.expectEqual(0x00, command);
     try std.testing.expectEqual(0x40, data);
@@ -121,49 +168,12 @@ test "constants" {
 
 test "init" {
     // Arrange
-    const expected_data = [14][]const u8{
-        &[_]u8{ 0x00, 0xAE, 0xD5, 0x80, 0xA8 },
-        &[_]u8{ 0x00, 0x1F },
-        &[_]u8{ 0x00, 0xD3, 0x00, 0x40, 0x8D },
-        &[_]u8{ 0x00, 0x14 },
-        &[_]u8{ 0x00, 0x20, 0x00, 0xA1, 0xC8 },
-        &[_]u8{ 0x00, 0xDA },
-        &[_]u8{ 0x00, 0x02 },
-        &[_]u8{ 0x00, 0x81 },
-        &[_]u8{ 0x00, 0x8F },
-        &[_]u8{ 0x00, 0xD9 },
-        &[_]u8{ 0x00, 0xF1 },
-        &[_]u8{ 0x00, 0xDB, 0x40, 0xA4, 0xA6, 0x2E, 0xAF },
-        &[_]u8{ 0x00, 0x22, 0x00, 0xFF, 0x21, 0x00 },
-        &[_]u8{ 0x00, 0x7F },
-    };
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0xAE, 0xD5, 0x80, 0xA8, 0x00, 0x1F, 0x00, 0xD3, 0x00, 0x40, 0x8D, 0x00, 0x14, 0x00, 0x20, 0x00, 0xA1, 0xC8, 0x00, 0xDA, 0x00, 0x02, 0x00, 0x81, 0x00, 0x8F, 0x00, 0xD9, 0x00, 0xF1, 0x00, 0xDB, 0x40, 0xA4, 0xA6, 0x2E, 0xAF, 0x00, 0x22, 0x00, 0xFF, 0x21, 0x00, 0x00, 0x7F };
     // Act
-    const recieved_data = init();
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.init();
     // Assert
-    for (expected_data, recieved_data) |expected, recieved| {
-        try std.testing.expectEqualSlices(u8, expected, recieved);
-    }
-}
-
-test "setContrast" {
-    // Arrange
-    const vals = [_]u8{ std.math.minInt(u8), std.math.maxInt(u8), 123 };
-    for (vals) |val| {
-        const expected_data = [_]u8{ command, @enumToInt(FC.SetContrastControll), val };
-        // Act
-        const recieved_data = setContrast(val);
-        // Assert
-        try std.testing.expectEqual(expected_data, recieved_data);
-    }
-}
-
-test "display" {
-    for ([_]u8{ @enumToInt(FC.DisplayOn), @enumToInt(FC.DisplayOff), 0xa6, 0xa7 }, [_]DisplayState{ DisplayState.on, DisplayState.off, DisplayState.normal, DisplayState.inverse }) |val, state| {
-        // Arrange
-        const expected_data = [_]u8{ command, val };
-        // Act
-        const recieved_data = display(state);
-        // Assert
-        try std.testing.expectEqual(expected_data, recieved_data);
-    }
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
 }

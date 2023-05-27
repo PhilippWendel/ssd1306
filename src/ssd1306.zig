@@ -8,7 +8,7 @@ fn SSD1306Struct(comptime WriterType: type) type {
     return struct {
         const Self = @This();
         wt: WriterType,
-
+        // 0x00 AE D5 80 A8 00 1F 00 D3 00 40 D8 00 14 00 20 00 A1 C8 00 DA 00 02 00 81 00 8F 00 D9 00 F1 00 DB 40 A4 A6 2E AF 00 22 00 FF 21 00 00 7F
         pub fn init(self: Self) !void {
             if (true) {
                 const init_commands = [_][]const u8{
@@ -92,6 +92,9 @@ fn SSD1306Struct(comptime WriterType: type) type {
                 .segTo127 => 0xA1,
             } });
         }
+        pub fn (self: Self, byte: u8) !void {
+            try self.wt.writeAll(&[_]u8{ @bitcast(u8, ControllByte{ .Co = 1, .@"D/C#" = 1 }), byte });
+        }
         pub fn setCOMOutputScanDirection(self: Self, r: enum { normal, remapped }) !void {
             try self.wt.writeAll(&[_]u8{ command, switch (r) {
                 .normal => 0xC0,
@@ -101,6 +104,15 @@ fn SSD1306Struct(comptime WriterType: type) type {
     };
 }
 
+const ControllByte = packed struct {
+    // If the Co bit is set as logic “0”, the transmission of the following information will contain data bytes only
+    Co: u1,
+    // The D/C# bit determines the next data byte is acted as a command or a data.
+    // If the D/C# bit is set to logic “0”, it defines the following data byte as a command.
+    // If the D/C# bit is set to logic “1”, it defines the following data byte as a data which will be stored at the GDDRAM.
+    @"D/C#": enum(u1) { Command = 0, Data = 1 },
+    data: u6 = 0b00_0000,
+};
 // [1, p. 28]
 pub const FC = enum(u8) {
     /// Double byte command to select 1 out of 256 contrast steps.
@@ -127,35 +139,16 @@ pub const FC = enum(u8) {
 
 const Address = error{ StartToLarge, EndToLarge };
 
-pub fn setColumnStartAndEndAddress(start: u8, end: u8) Address![6]u8 {
-    if (start > 127) return Address.StartToLarge;
-    if (end > 127) return Address.EndToLarge;
-    return [_]u8{ command, 0x21, command, start, command, end };
-}
-
-const ColumnAddress = error{ StartToLarge, EndToLarge };
-
-pub fn setPageStartAndEndAddress(start: u8, end: u8) Address![6]u8 {
-    if (start > 7) return Address.StartToLarge;
-    if (end > 7) return Address.EndToLarge;
-    return [_]u8{
-        // Setup page start and end address
-        command, 0x22,
-        command, start,
-        command, end,
-    };
-}
-
 // Constants
 const command: u8 = 0x00;
-const data: u8 = 0x40;
+const data = ControllByte{ .Co = 0, .@"D/C#" = .Data };
 
 // References:
 // [1] https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
 
 test "constants" {
     try std.testing.expectEqual(0x00, command);
-    try std.testing.expectEqual(0x40, data);
+    try std.testing.expectEqual(0x40, data.raw);
 
     try std.testing.expectEqual(0x81, @enumToInt(FC.SetContrastControll));
     try std.testing.expectEqual(0xA4, @enumToInt(FC.EntrireDisplayOnFollowRamContent));

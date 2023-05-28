@@ -9,7 +9,7 @@ fn SSD1306Struct(comptime WriterType: type) type {
         const Self = @This();
         wt: WriterType,
         // 0x00 AE D5 80 A8 00 1F 00 D3 00 40 D8 00 14 00 20 00 A1 C8 00 DA 00 02 00 81 00 8F 00 D9 00 F1 00 DB 40 A4 A6 2E AF 00 22 00 FF 21 00 00 7F
-
+        // TODO(philippwendel) Add doc comments for functions
         // Fundamental Commands
         pub fn setContrast(self: Self, contrast: u8) !void {
             try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x81, contrast });
@@ -86,7 +86,43 @@ fn SSD1306Struct(comptime WriterType: type) type {
         pub fn setPageStartAddress(self: Self, address: u3) !void {
             try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xB0 | @as(u8, address) });
         }
-        // TODO(philippwendel) Hardware Configuration Commands
+
+        // Hardware Configuration Commands
+        pub fn setDisplayStartLine(self: Self, line: u6) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x40 | @as(u8, line) });
+        }
+
+        // false: column address 0 is mapped to SEG0
+        // true: column address 127 is mapped to SEG0
+        pub fn setRegmentRemap(self: Self, remap: bool) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), if (remap) 0xA1 else 0xA0 });
+        }
+
+        pub fn setMultiplexRatio(self: Self, ratio: u6) !void {
+            if (ratio <= 14) return MultiplexRatioError.InvalidEntry;
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xA8, @as(u8, ratio) });
+        }
+
+        /// false: normal (COM0 to COMn)
+        /// true: remapped
+        pub fn setCOMOuputScanDirection(self: Self, remapped: bool) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), if (remapped) 0xC8 else 0xC0 });
+        }
+
+        pub fn setDisplayOffset(self: Self, vertical_shift: u6) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xD3, @as(u8, vertical_shift) });
+        }
+
+        // TODO(philippwendel) Make config to enum
+        pub fn setCOMPinsHardwareConfiguration(self: Self, config: u2) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xDA, @as(u8, config) << 4 | 0x02 });
+        }
+
+        // Timing & Driving Scheme Setting Commands
+        // TODO(philippwendel) Split in two funktions
+        pub fn setDisplayClockDivideRatioAndOscillatorFrequency(self: Self, divide_ratio: u4, freq: u4) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xD5, (@as(u8, freq) << 4) | @as(u8, divide_ratio) });
+        }
     };
 }
 
@@ -104,13 +140,14 @@ const DisplayMode = enum(u8) { off = 0xAE, on = 0xAF };
 // Scrolling Commands
 const HorizontalScrollDirection = enum(u8) { right = 0x26, left = 0x27 };
 const VerticalAndHorizontalScrollDirection = enum(u8) { right = 0x29, left = 0x2A };
-const PageError = error{
-    EndPageIsSmallerThanStartPage,
-};
+const PageError = error{EndPageIsSmallerThanStartPage};
 
 // Addressing Setting Commands
 const Column = enum(u1) { lower = 0, higher = 1 };
 const MemoryAddressingMode = enum(u2) { horizontal = 0b00, vertical = 0b01, page = 0b10 };
+
+// Hardware Configuration Commands
+const MultiplexRatioError = error{InvalidEntry};
 // Tests
 
 // Fundamental Commands
@@ -293,6 +330,83 @@ test "setPageStartAddress" {
     // Act
     const ssd1306 = SSD1306(output.writer());
     try ssd1306.setPageStartAddress(7);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+// Hardware Configuration Commands
+test "setDisplayStartLine" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0b0110_0000 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.setDisplayStartLine(32);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+test "setRegmentRemap" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0xA0, 0x00, 0xA1 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.setRegmentRemap(false);
+    try ssd1306.setRegmentRemap(true);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+test "setMultiplexRatio" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0xA8, 15 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.setMultiplexRatio(15);
+    const err = ssd1306.setMultiplexRatio(0);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+    try std.testing.expectEqual(err, MultiplexRatioError.InvalidEntry);
+}
+
+test "setCOMOuputScanDirection" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0xC0, 0x00, 0xC8 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.setCOMOuputScanDirection(false);
+    try ssd1306.setCOMOuputScanDirection(true);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+test "setDisplayOffset" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0xD3, 17 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.setDisplayOffset(17);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+test "setCOMPinsHardwareConfiguration" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0xDA, 0b0011_0010 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.setCOMPinsHardwareConfiguration(0b11);
     // Assert
     try std.testing.expectEqualSlices(u8, output.items, expected_data);
 }

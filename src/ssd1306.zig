@@ -99,7 +99,7 @@ fn SSD1306Struct(comptime WriterType: type) type {
         }
 
         pub fn setMultiplexRatio(self: Self, ratio: u6) !void {
-            if (ratio <= 14) return MultiplexRatioError.InvalidEntry;
+            if (ratio <= 14) return InputError.InvalidEntry;
             try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xA8, @as(u8, ratio) });
         }
 
@@ -122,6 +122,20 @@ fn SSD1306Struct(comptime WriterType: type) type {
         // TODO(philippwendel) Split in two funktions
         pub fn setDisplayClockDivideRatioAndOscillatorFrequency(self: Self, divide_ratio: u4, freq: u4) !void {
             try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xD5, (@as(u8, freq) << 4) | @as(u8, divide_ratio) });
+        }
+
+        pub fn setPrechargePeriod(self: Self, phase1: u4, phase2: u4) !void {
+            if (phase1 == 0 or phase2 == 0) return InputError.InvalidEntry;
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xD9, @as(u8, phase2) << 4 | @as(u8, phase1) });
+        }
+
+        // TODO(philippwendel) Make level to enum
+        pub fn setV_COMH_DeselectLevel(self: Self, level: u3) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xDB, @as(u8, level) << 4 });
+        }
+
+        pub fn nop(self: Self) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xE3 });
         }
     };
 }
@@ -147,7 +161,7 @@ const Column = enum(u1) { lower = 0, higher = 1 };
 const MemoryAddressingMode = enum(u2) { horizontal = 0b00, vertical = 0b01, page = 0b10 };
 
 // Hardware Configuration Commands
-const MultiplexRatioError = error{InvalidEntry};
+const InputError = error{InvalidEntry};
 // Tests
 
 // Fundamental Commands
@@ -371,7 +385,7 @@ test "setMultiplexRatio" {
     const err = ssd1306.setMultiplexRatio(0);
     // Assert
     try std.testing.expectEqualSlices(u8, output.items, expected_data);
-    try std.testing.expectEqual(err, MultiplexRatioError.InvalidEntry);
+    try std.testing.expectEqual(err, InputError.InvalidEntry);
 }
 
 test "setCOMOuputScanDirection" {
@@ -407,6 +421,55 @@ test "setCOMPinsHardwareConfiguration" {
     // Act
     const ssd1306 = SSD1306(output.writer());
     try ssd1306.setCOMPinsHardwareConfiguration(0b11);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+// Timing & Driving Scheme Setting Commands
+test "setDisplayClockDivideRatioAndOscillatorFrequency" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0xD5, 0x00 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.setDisplayClockDivideRatioAndOscillatorFrequency(0, 0);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+test "setPrechargePeriod" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0xD9, 0b0001_0001 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.setPrechargePeriod(1, 1);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+test "setV_COMH_DeselectLevel" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0xDB, 0b0011_0000 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.setV_COMH_DeselectLevel(0b011);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+test "nop" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0xE3 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.nop();
     // Assert
     try std.testing.expectEqualSlices(u8, output.items, expected_data);
 }

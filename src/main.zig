@@ -42,18 +42,20 @@ pub fn main() !void {
         try ssd1306.wt.writeAll(c);
     }
 
+    //const bitmap = &[_]u8{0x40} ++ &[_]u8{0xF0} ** 512;
+    //try ssd1306.wt.writeAll(bitmap);
+    for (0..512) |_| {
+        try ssd1306.wt.writeAll(&[_]u8{ 0x40, 0xBE, 0xEF, 0x00, 0x00 });
+    }
+    try ssd1306.wt.writeAll(&[_]u8{ 0x40, 0xFF, 0xFF, 0xFF, 0xFF });
+
     try ssd1306.entireDisplayOn(.resumeToRam);
     try ssd1306.deactivateScroll();
     try ssd1306.continuousHorizontalScrollSetup(.right, 0b000, 0b111, 0b100);
     // try ssd1306.continuousVerticalAndHorizontalScrollSetup(.right, 0b000, 0b111, 0b100, 0);
-    try ssd1306.setVerticalScrollArea(0, 15);
+    // try ssd1306.setVerticalScrollArea(0, 15);
     try ssd1306.activateScroll();
 
-    //const bitmap = &[_]u8{0x40} ++ &[_]u8{0xF0} ** 512;
-    //try ssd1306.wt.writeAll(bitmap);
-    for (0..128) |_| {
-        try ssd1306.wt.writeAll(&[_]u8{ 0x40, 0xBE, 0xEF, 0x0F, 0xF0 });
-    }
     var contrast: u8 = 255;
     while (true) {
         try uart.writer().writeAll("Loop\r\n");
@@ -72,6 +74,7 @@ pub fn main() !void {
         busyloop(1_000_000);
         // try ssd1306.entireDisplayOn(.ignoreRam);
         busyloop(1_000_000);
+        try ssd1306.wt.writeAll(&[_]u8{ 0x40, 0xFF, 0xFF, 0xFF, 0xFF });
     }
 }
 

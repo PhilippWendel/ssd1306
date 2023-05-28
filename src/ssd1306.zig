@@ -66,8 +66,26 @@ fn SSD1306Struct(comptime WriterType: type) type {
             try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xA3, @as(u8, start_row), @as(u8, num_of_rows) });
         }
 
-        // TODO(philippwendel) Addressing Setting Commands
+        // Addressing Setting Commands
+        pub fn setColumnStartAddressForPageAddressingMode(self: Self, column: Column, address: u4) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), (@as(u8, @enumToInt(column)) << 4) | @as(u8, address) });
+        }
 
+        pub fn setMemoryAddressingMode(self: Self, mode: MemoryAddressingMode) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x20, @as(u8, @enumToInt(mode)) });
+        }
+
+        pub fn setColumnAddress(self: Self, start: u7, end: u7) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x21, @as(u8, start), @as(u8, end) });
+        }
+
+        pub fn setPageAddress(self: Self, start: u3, end: u3) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x22, @as(u8, start), @as(u8, end) });
+        }
+
+        pub fn setPageStartAddress(self: Self, address: u3) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xB0 | @as(u8, address) });
+        }
         // TODO(philippwendel) Hardware Configuration Commands
     };
 }
@@ -90,6 +108,9 @@ const PageError = error{
     EndPageIsSmallerThanStartPage,
 };
 
+// Addressing Setting Commands
+const Column = enum(u1) { lower = 0, higher = 1 };
+const MemoryAddressingMode = enum(u2) { horizontal = 0b00, vertical = 0b01, page = 0b10 };
 // Tests
 
 // Fundamental Commands
@@ -207,6 +228,71 @@ test "setVerticalScrollArea" {
     // Act
     const ssd1306 = SSD1306(output.writer());
     try ssd1306.setVerticalScrollArea(0, 15);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+// Addressing Setting Commands
+test "setColumnStartAddressForPageAddressingMode" {
+    // Arrange
+    for ([_]Column{ Column.lower, Column.higher }, [_]u8{ 0x0F, 0x1F }) |column, data| {
+        var output = std.ArrayList(u8).init(std.testing.allocator);
+        defer output.deinit();
+        const expected_data = &[_]u8{ 0x00, data };
+        // Act
+        const ssd1306 = SSD1306(output.writer());
+        try ssd1306.setColumnStartAddressForPageAddressingMode(column, 0xF);
+        // Assert
+        try std.testing.expectEqualSlices(u8, output.items, expected_data);
+    }
+}
+
+test "setMemoryAddressingMode" {
+    // Arrange
+    for ([_]MemoryAddressingMode{ .horizontal, .vertical, .page }) |mode| {
+        var output = std.ArrayList(u8).init(std.testing.allocator);
+        defer output.deinit();
+        const expected_data = &[_]u8{ 0x00, 0x20, @as(u8, @enumToInt(mode)) };
+        // Act
+        const ssd1306 = SSD1306(output.writer());
+        try ssd1306.setMemoryAddressingMode(mode);
+        // Assert
+        try std.testing.expectEqualSlices(u8, output.items, expected_data);
+    }
+}
+
+test "setColumnAddress" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0x21, 0, 127 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.setColumnAddress(0, 127);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+test "setPageAddress" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0x22, 0, 7 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.setPageAddress(0, 7);
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+test "setPageStartAddress" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0xB7 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.setPageStartAddress(7);
     // Assert
     try std.testing.expectEqualSlices(u8, output.items, expected_data);
 }

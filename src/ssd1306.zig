@@ -137,6 +137,11 @@ fn SSD1306Struct(comptime WriterType: type) type {
         pub fn nop(self: Self) !void {
             try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xE3 });
         }
+
+        // Charge Pump Commands
+        pub fn chargePumpSetting(self: Self, enable: bool) !void {
+            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x8D, if (enable) 0x14 else 0x10 });
+        }
     };
 }
 
@@ -470,6 +475,20 @@ test "nop" {
     // Act
     const ssd1306 = SSD1306(output.writer());
     try ssd1306.nop();
+    // Assert
+    try std.testing.expectEqualSlices(u8, output.items, expected_data);
+}
+
+// Charge Pump Commands
+test "chargePumpSetting" {
+    // Arrange
+    var output = std.ArrayList(u8).init(std.testing.allocator);
+    defer output.deinit();
+    const expected_data = &[_]u8{ 0x00, 0x8D, 0x14, 0x00, 0x8D, 0x10 };
+    // Act
+    const ssd1306 = SSD1306(output.writer());
+    try ssd1306.chargePumpSetting(true);
+    try ssd1306.chargePumpSetting(false);
     // Assert
     try std.testing.expectEqualSlices(u8, output.items, expected_data);
 }

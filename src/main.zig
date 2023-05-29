@@ -21,6 +21,8 @@ pub fn main() !void {
     try ssd1306.init();
 
     try uart.writer().writeAll("clearScreen\r\n");
+    try ssd1306.clearScreen(true);
+    busyloop(1_000_000);
     try ssd1306.clearScreen(false);
 
     try ssd1306.setMemoryAddressingMode(.horizontal);
@@ -46,6 +48,10 @@ pub fn main() !void {
             }
         }
     }
+    busyloop(1_000_000);
+    try ssd1306.continuousHorizontalScrollSetup(.right, 1, 6, 0b110);
+    try ssd1306.setVerticalScrollArea(16, 111);
+    try ssd1306.activateScroll();
 
     // try ssd1306.entireDisplayOn(.resumeToRam);
     try ssd1306.setMemoryAddressingMode(.horizontal);
@@ -55,9 +61,9 @@ pub fn main() !void {
     try uart.writer().writeAll("Loop\r\n");
     while (true) {
         try ssd1306.setContrast(contrast);
-        contrast = if (contrast == 255) 128 else 255;
-        try ssd1306.wt.writeAll(&[_]u8{ 0x40, 0x00 });
-        busyloop(300_000);
+        contrast = if (contrast == 255) 10 else 255;
+        // try ssd1306.wt.writeAll(&[_]u8{ 0x40, 0x00 });
+        busyloop(1_000_000);
     }
 }
 

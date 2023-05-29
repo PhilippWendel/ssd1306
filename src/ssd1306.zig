@@ -8,8 +8,59 @@ fn SSD1306Struct(comptime WriterType: type) type {
     return struct {
         const Self = @This();
         wt: WriterType,
-        // 0x00 AE D5 80 A8 00 1F 00 D3 00 40 D8 00 14 00 20 00 A1 C8 00 DA 00 02 00 81 00 8F 00 D9 00 F1 00 DB 40 A4 A6 2E AF 00 22 00 FF 21 00 00 7F
         // TODO(philippwendel) Add doc comments for functions
+        pub fn init(self: Self, datasheet: bool) !void {
+            if (datasheet) {
+                try self.setDisplay(.off);
+
+                try self.deactivateScroll();
+                try self.setRegmentRemap(false);
+                try self.setCOMOuputScanDirection(false);
+                try self.setNormalOrInverseDisplay(.normal);
+                try self.setContrast(255);
+
+                try self.chargePumpSetting(true);
+                try self.setMultiplexRatio(0x3F);
+                try self.setDisplayClockDivideRatioAndOscillatorFrequency(0, 8);
+                try self.setCOMPinsHardwareConfiguration(0);
+
+                try self.setDisplayOffset(0);
+                try self.setDisplayStartLine(0);
+                try self.entireDisplayOn(.resumeToRam);
+            } else {
+                // 00 AE
+                try self.setDisplayClockDivideRatioAndOscillatorFrequency(0x0, 0x8); // D5 80
+                // try setMultiplexRatio(0); // A8 00 is not a valid entry
+                try self.setColumnStartAddressForPageAddressingMode(.higher, 0xF); // 1F
+                try self.setDisplayOffset(0x0); // 00 D3 00
+                try self.setDisplayStartLine(0x0); // 40
+                // D8 00 14 00 ??? there is no D8 command, charge pump ???
+                try self.setMemoryAddressingMode(.horizontal); // 20 00
+                try self.setRegmentRemap(true); // A1
+                try self.setCOMOuputScanDirection(true); // C8
+                try self.setCOMPinsHardwareConfiguration(0b00); // 00 DA 00 02
+                try self.setContrast(255); // 00 81 00 IDK why its set to zero, set it to max instead
+                // 8F 00 ???
+                try self.setPrechargePeriod(0b0001, 0b0001); // D9 00, 0 clock is invalid entry???
+                // F1 00 ???
+                try self.setV_COMH_DeselectLevel(0x4); // DB 40
+                try self.entireDisplayOn(.resumeToRam); // A4
+                try self.setNormalOrInverseDisplay(.normal); // A6
+                try self.deactivateScroll(); // 2E
+                try self.setDisplay(.on);
+            }
+        }
+
+        pub fn clearScreen(self: Self) !void {
+            try self.setMemoryAddressingMode(.horizontal);
+            try self.setColumnAddress(0, 127);
+            try self.setPageAddress(0, 7);
+            try self.setDisplayStartLine(0);
+            for (0..2048) |_| {
+                try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{ .DC = 1 }), 0xFF });
+            }
+        }
+
         // Fundamental Commands
         pub fn setContrast(self: Self, contrast: u8) !void {
             try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x81, contrast });

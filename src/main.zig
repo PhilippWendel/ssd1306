@@ -16,50 +16,48 @@ pub fn main() !void {
         .parity = null,
         .data_bits = .eight,
     }) catch unreachable;
-    try uart.writer().writeAll("Hallo Welt\r\n");
 
     const ssd1306 = SSD1306(I2C_Writer(0x3C, 100_000).writer());
-    try uart.writer().writeAll("Init\r\n");
-    try ssd1306.init(true);
-    try ssd1306.clearScreen();
-    // try ssd1306.setPageAddress(0, 7); // 00 22 00 FF
-    // try ssd1306.setColumnAddress(0, 0); // 21 00 00
-    // try ssd1306.setDisplayStartLine(0x3F); // 7F
+    try ssd1306.init();
 
-    //const bitmap = &[_]u8{0x40} ++ &[_]u8{0xF0} ** 512;
-    //try ssd1306.wt.writeAll(bitmap);
+    try uart.writer().writeAll("clearScreen\r\n");
+    try ssd1306.clearScreen(false);
+
     try ssd1306.setMemoryAddressingMode(.horizontal);
-    try ssd1306.setColumnAddress(20, 30);
-    try ssd1306.setPageAddress(2, 4);
-    for (0..30) |_| {
-        try ssd1306.wt.writeAll(&[_]u8{ 0x40, 0x00 });
+    try ssd1306.setColumnAddress(16, 111);
+    try ssd1306.setPageAddress(1, 6);
+
+    const zig_logo = @embedFile("zig_logo.pbm");
+    const zig_img = zig_logo[9..]; // Ignore pbm metadata
+
+    // We write in 8x8 bit blocks since our image goes from left to right and then top to bottom,
+    // but the display goes 8 bits down and then left to right and then top to bottom,
+    for (0..48 / 8) |line| {
+        for (0..96 / 8) |col| {
+            const masks = [_]u8{ 0b1000_0000, 0b0100_0000, 0b0010_0000, 0b0001_0000, 0b0000_1000, 0b0000_0100, 0b0000_0010, 0b0000_0001 };
+            for (masks) |mask| {
+                var byte: u8 = 0;
+                for (0..8) |i| {
+                    if ((zig_img[line * 8 * 12 + col + 12 * i] & mask) != 0) {
+                        byte |= masks[7 - i];
+                    }
+                }
+                try ssd1306.wt.writeAll(&[_]u8{ 0x40, byte });
+            }
+        }
     }
-    // try ssd1306.wt.writeAll(&[_]u8{ 0x40, 0xFF, 0xFF, 0xFF, 0xFF });
 
-    // try ssd1306.continuousHorizontalScrollSetup(.right, 0b000, 0b111, 0b100);
-    // try ssd1306.continuousVerticalAndHorizontalScrollSetup(.right, 0b000, 0b111, 0b100, 0);
-    // try ssd1306.setVerticalScrollArea(0, 15);
-    // try ssd1306.activateScroll();
-
+    // try ssd1306.entireDisplayOn(.resumeToRam);
+    try ssd1306.setMemoryAddressingMode(.horizontal);
+    try ssd1306.setColumnAddress(0, 127);
+    try ssd1306.setPageAddress(0, 7);
     var contrast: u8 = 255;
+    try uart.writer().writeAll("Loop\r\n");
     while (true) {
-        try uart.writer().writeAll("Loop\r\n");
         try ssd1306.setContrast(contrast);
-        contrast = if (contrast == 255) 1 else 255;
-        busyloop(1_000_000);
-        // try ssd1306.setDisplay(.off);
-        // busyloop(1_000_000);
-        // try ssd1306.setDisplay(.on);
-        // busyloop(1_000_000);
-        // try ssd1306.setNormalOrInverseDisplay(.inverse);
-        // busyloop(1_000_000);
-        // try ssd1306.setNormalOrInverseDisplay(.normal);
-        // busyloop(1_000_000);
-        // try ssd1306.entireDisplayOn(.resumeToRam);
-        // busyloop(1_000_000);
-        // // try ssd1306.entireDisplayOn(.ignoreRam);
-        // busyloop(1_000_000);
-        // try ssd1306.wt.writeAll(&[_]u8{ 0x40, 0xFF, 0xFF, 0xFF, 0xFF });
+        contrast = if (contrast == 255) 128 else 255;
+        try ssd1306.wt.writeAll(&[_]u8{ 0x40, 0x00 });
+        busyloop(300_000);
     }
 }
 

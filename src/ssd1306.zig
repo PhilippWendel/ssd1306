@@ -9,80 +9,67 @@ fn SSD1306Struct(comptime WriterType: type) type {
         const Self = @This();
         wt: WriterType,
         // TODO(philippwendel) Add doc comments for functions
-        pub fn init(self: Self, datasheet: bool) !void {
-            if (datasheet) {
-                try self.setDisplay(.off);
+        // TODO(philippwendel) Find out why using 'inline if' in writeAll(&[_]u8{ command, if(cond) val1 else val2 }); hangs code on atmega328p, since tests work fine
+        pub fn init(self: Self) !void {
+            try self.setDisplay(.off);
 
-                try self.deactivateScroll();
-                try self.setRegmentRemap(false);
-                try self.setCOMOuputScanDirection(false);
-                try self.setNormalOrInverseDisplay(.normal);
-                try self.setContrast(255);
+            try self.deactivateScroll();
+            try self.setSegmentRemap(true); // Flip left/right
+            try self.setCOMOuputScanDirection(true); // Flip up/down
+            try self.setNormalOrInverseDisplay(.normal);
+            try self.setContrast(255);
 
-                try self.chargePumpSetting(true);
-                try self.setMultiplexRatio(0x3F);
-                try self.setDisplayClockDivideRatioAndOscillatorFrequency(0, 8);
-                try self.setCOMPinsHardwareConfiguration(0);
+            try self.chargePumpSetting(true);
+            try self.setMultiplexRatio(63); // Default
+            try self.setDisplayClockDivideRatioAndOscillatorFrequency(0, 8);
+            try self.setPrechargePeriod(0b0001, 0b0001);
+            try self.setV_COMH_DeselectLevel(0x4);
+            try self.setCOMPinsHardwareConfiguration(0b001); // See page 40 in datasheet
 
-                try self.setDisplayOffset(0);
-                try self.setDisplayStartLine(0);
-                try self.entireDisplayOn(.resumeToRam);
-            } else {
-                // 00 AE
-                try self.setDisplayClockDivideRatioAndOscillatorFrequency(0x0, 0x8); // D5 80
-                // try setMultiplexRatio(0); // A8 00 is not a valid entry
-                try self.setColumnStartAddressForPageAddressingMode(.higher, 0xF); // 1F
-                try self.setDisplayOffset(0x0); // 00 D3 00
-                try self.setDisplayStartLine(0x0); // 40
-                // D8 00 14 00 ??? there is no D8 command, charge pump ???
-                try self.setMemoryAddressingMode(.horizontal); // 20 00
-                try self.setRegmentRemap(true); // A1
-                try self.setCOMOuputScanDirection(true); // C8
-                try self.setCOMPinsHardwareConfiguration(0b00); // 00 DA 00 02
-                try self.setContrast(255); // 00 81 00 IDK why its set to zero, set it to max instead
-                // 8F 00 ???
-                try self.setPrechargePeriod(0b0001, 0b0001); // D9 00, 0 clock is invalid entry???
-                // F1 00 ???
-                try self.setV_COMH_DeselectLevel(0x4); // DB 40
-                try self.entireDisplayOn(.resumeToRam); // A4
-                try self.setNormalOrInverseDisplay(.normal); // A6
-                try self.deactivateScroll(); // 2E
-                try self.setDisplay(.on);
-            }
+            try self.setDisplayOffset(0);
+            try self.setDisplayStartLine(0);
+            try self.entireDisplayOn(.resumeToRam);
+
+            try self.setDisplay(.on);
         }
 
-        pub fn clearScreen(self: Self) !void {
+        pub fn clearScreen(self: Self, white: bool) !void {
             try self.setMemoryAddressingMode(.horizontal);
             try self.setColumnAddress(0, 127);
             try self.setPageAddress(0, 7);
-            try self.setDisplayStartLine(0);
-            for (0..2048) |_| {
-                try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{ .DC = 1 }), 0xFF });
+            for (0..(128 * 8)) |_| {
+                if (white) {
+                    try self.wt.writeAll(&[_]u8{ control_data, 0xFF });
+                } else {
+                    try self.wt.writeAll(&[_]u8{ control_data, 0x00 });
+                }
             }
+            // try self.entireDisplayOn(.resumeToRam);
+            //try self.setDisplay(.on);
         }
 
         // Fundamental Commands
         pub fn setContrast(self: Self, contrast: u8) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x81, contrast });
+            try self.wt.writeAll(&[_]u8{ command, 0x81, contrast });
         }
 
         pub fn entireDisplayOn(self: Self, mode: DisplayOnMode) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), @enumToInt(mode) });
+            try self.wt.writeAll(&[_]u8{ command, @enumToInt(mode) });
         }
 
         pub fn setNormalOrInverseDisplay(self: Self, mode: NormalOrInverseDisplay) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), @enumToInt(mode) });
+            try self.wt.writeAll(&[_]u8{ command, @enumToInt(mode) });
         }
 
         pub fn setDisplay(self: Self, mode: DisplayMode) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), @enumToInt(mode) });
+            try self.wt.writeAll(&[_]u8{ command, @enumToInt(mode) });
         }
 
         // Scrolling Commands
         pub fn continuousHorizontalScrollSetup(self: Self, direction: HorizontalScrollDirection, start_page: u3, end_page: u3, frame_frequency: u3) !void {
             if (end_page < start_page) return PageError.EndPageIsSmallerThanStartPage;
             try self.wt.writeAll(&[_]u8{
-                @bitCast(u8, ControlByte{}),
+                command,
                 @enumToInt(direction),
                 0x00, // Dummy byte
                 @as(u8, start_page),
@@ -95,7 +82,7 @@ fn SSD1306Struct(comptime WriterType: type) type {
 
         pub fn continuousVerticalAndHorizontalScrollSetup(self: Self, direction: VerticalAndHorizontalScrollDirection, start_page: u3, end_page: u3, frame_frequency: u3, vertical_scrolling_offset: u6) !void {
             try self.wt.writeAll(&[_]u8{
-                @bitCast(u8, ControlByte{}),
+                command,
                 @enumToInt(direction),
                 0x00, // Dummy byte
                 @as(u8, start_page),
@@ -106,101 +93,110 @@ fn SSD1306Struct(comptime WriterType: type) type {
         }
 
         pub fn deactivateScroll(self: Self) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x2E });
+            try self.wt.writeAll(&[_]u8{ command, 0x2E });
         }
 
         pub fn activateScroll(self: Self) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x2F });
+            try self.wt.writeAll(&[_]u8{ command, 0x2F });
         }
 
         pub fn setVerticalScrollArea(self: Self, start_row: u6, num_of_rows: u7) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xA3, @as(u8, start_row), @as(u8, num_of_rows) });
+            try self.wt.writeAll(&[_]u8{ command, 0xA3, @as(u8, start_row), @as(u8, num_of_rows) });
         }
 
         // Addressing Setting Commands
         pub fn setColumnStartAddressForPageAddressingMode(self: Self, column: Column, address: u4) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), (@as(u8, @enumToInt(column)) << 4) | @as(u8, address) });
+            try self.wt.writeAll(&[_]u8{ command, (@as(u8, @enumToInt(column)) << 4) | @as(u8, address) });
         }
 
         pub fn setMemoryAddressingMode(self: Self, mode: MemoryAddressingMode) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x20, @as(u8, @enumToInt(mode)) });
+            try self.wt.writeAll(&[_]u8{ command, 0x20, @as(u8, @enumToInt(mode)) });
         }
 
         pub fn setColumnAddress(self: Self, start: u7, end: u7) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x21, @as(u8, start), @as(u8, end) });
+            try self.wt.writeAll(&[_]u8{ command, 0x21, @as(u8, start), @as(u8, end) });
         }
 
         pub fn setPageAddress(self: Self, start: u3, end: u3) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x22, @as(u8, start), @as(u8, end) });
+            try self.wt.writeAll(&[_]u8{ command, 0x22, @as(u8, start), @as(u8, end) });
         }
 
         pub fn setPageStartAddress(self: Self, address: u3) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xB0 | @as(u8, address) });
+            try self.wt.writeAll(&[_]u8{ command, 0xB0 | @as(u8, address) });
         }
 
         // Hardware Configuration Commands
         pub fn setDisplayStartLine(self: Self, line: u6) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x40 | @as(u8, line) });
+            try self.wt.writeAll(&[_]u8{ command, 0x40 | @as(u8, line) });
         }
 
         // false: column address 0 is mapped to SEG0
         // true: column address 127 is mapped to SEG0
-        pub fn setRegmentRemap(self: Self, remap: bool) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), if (remap) 0xA1 else 0xA0 });
+        pub fn setSegmentRemap(self: Self, remap: bool) !void {
+            if (remap) {
+                try self.wt.writeAll(&[_]u8{ command, 0xA1 });
+            } else {
+                try self.wt.writeAll(&[_]u8{ command, 0xA0 });
+            }
         }
 
         pub fn setMultiplexRatio(self: Self, ratio: u6) !void {
             if (ratio <= 14) return InputError.InvalidEntry;
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xA8, @as(u8, ratio) });
+            try self.wt.writeAll(&[_]u8{ command, 0xA8, @as(u8, ratio) });
         }
 
         /// false: normal (COM0 to COMn)
         /// true: remapped
-        pub fn setCOMOuputScanDirection(self: Self, remapped: bool) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), if (remapped) 0xC8 else 0xC0 });
+        pub fn setCOMOuputScanDirection(self: Self, remap: bool) !void {
+            if (remap) {
+                try self.wt.writeAll(&[_]u8{ command, 0xC8 });
+            } else {
+                try self.wt.writeAll(&[_]u8{ command, 0xC0 });
+            }
         }
 
         pub fn setDisplayOffset(self: Self, vertical_shift: u6) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xD3, @as(u8, vertical_shift) });
+            try self.wt.writeAll(&[_]u8{ command, 0xD3, @as(u8, vertical_shift) });
         }
 
         // TODO(philippwendel) Make config to enum
         pub fn setCOMPinsHardwareConfiguration(self: Self, config: u2) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xDA, @as(u8, config) << 4 | 0x02 });
+            try self.wt.writeAll(&[_]u8{ command, 0xDA, @as(u8, config) << 4 | 0x02 });
         }
 
         // Timing & Driving Scheme Setting Commands
         // TODO(philippwendel) Split in two funktions
         pub fn setDisplayClockDivideRatioAndOscillatorFrequency(self: Self, divide_ratio: u4, freq: u4) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xD5, (@as(u8, freq) << 4) | @as(u8, divide_ratio) });
+            try self.wt.writeAll(&[_]u8{ command, 0xD5, (@as(u8, freq) << 4) | @as(u8, divide_ratio) });
         }
 
         pub fn setPrechargePeriod(self: Self, phase1: u4, phase2: u4) !void {
             if (phase1 == 0 or phase2 == 0) return InputError.InvalidEntry;
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xD9, @as(u8, phase2) << 4 | @as(u8, phase1) });
+            try self.wt.writeAll(&[_]u8{ command, 0xD9, @as(u8, phase2) << 4 | @as(u8, phase1) });
         }
 
         // TODO(philippwendel) Make level to enum
         pub fn setV_COMH_DeselectLevel(self: Self, level: u3) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xDB, @as(u8, level) << 4 });
+            try self.wt.writeAll(&[_]u8{ command, 0xDB, @as(u8, level) << 4 });
         }
 
         pub fn nop(self: Self) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0xE3 });
+            try self.wt.writeAll(&[_]u8{ command, 0xE3 });
         }
 
         // Charge Pump Commands
         pub fn chargePumpSetting(self: Self, enable: bool) !void {
-            try self.wt.writeAll(&[_]u8{ @bitCast(u8, ControlByte{}), 0x8D, if (enable) 0x14 else 0x10 });
+            if (enable) {
+                try self.wt.writeAll(&[_]u8{ command, 0x8D, 0x14 });
+            } else {
+                try self.wt.writeAll(&[_]u8{ command, 0x8D, 0x10 });
+            }
         }
     };
 }
 
-const ControlByte = packed struct(u8) {
-    Co: u1 = 0,
-    DC: u1 = 0,
-    unused: u6 = 0,
-};
+const command = 0x00;
+const control_data = 0x40;
 
 // Fundamental Commands
 const DisplayOnMode = enum(u8) { resumeToRam = 0xA4, ignoreRam = 0xA5 };
@@ -417,15 +413,15 @@ test "setDisplayStartLine" {
     try std.testing.expectEqualSlices(u8, output.items, expected_data);
 }
 
-test "setRegmentRemap" {
+test "setSegmentRemap" {
     // Arrange
     var output = std.ArrayList(u8).init(std.testing.allocator);
     defer output.deinit();
     const expected_data = &[_]u8{ 0x00, 0xA0, 0x00, 0xA1 };
     // Act
     const ssd1306 = SSD1306(output.writer());
-    try ssd1306.setRegmentRemap(false);
-    try ssd1306.setRegmentRemap(true);
+    try ssd1306.setSegmentRemap(false);
+    try ssd1306.setSegmentRemap(true);
     // Assert
     try std.testing.expectEqualSlices(u8, output.items, expected_data);
 }

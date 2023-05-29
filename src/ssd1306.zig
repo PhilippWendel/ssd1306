@@ -44,8 +44,8 @@ fn SSD1306Struct(comptime WriterType: type) type {
                     try self.wt.writeAll(&[_]u8{ control_data, 0x00 });
                 }
             }
-            // try self.entireDisplayOn(.resumeToRam);
-            //try self.setDisplay(.on);
+            try self.entireDisplayOn(.resumeToRam);
+            try self.setDisplay(.on);
         }
 
         // Fundamental Commands

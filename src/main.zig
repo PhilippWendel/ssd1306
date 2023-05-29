@@ -16,19 +16,26 @@ pub fn main() !void {
         .parity = null,
         .data_bits = .eight,
     }) catch unreachable;
+    try uart.writer().writeAll("Hello World\r\n");
 
-    const ssd1306 = SSD1306(I2C_Writer(0x3C, 100_000).writer());
+    const ssd1306 = SSD1306(I2C_Writer(0x3C, 400_000).writer());
+    try uart.writer().writeAll("Hello World\r\n");
     try ssd1306.init();
 
     try uart.writer().writeAll("clearScreen\r\n");
     try ssd1306.clearScreen(true);
     busyloop(1_000_000);
     try ssd1306.clearScreen(false);
+    for (0..8) |lines| {
+        for (0..128) |cols| {
+            try ssd1306.wt.writeAll(&[_]u8{ 0x40, if (lines == 0 or lines == 7 or cols <= 7 or cols >= 120) 0xFF else 0x00 });
+        }
+    }
 
+    try uart.writer().writeAll("Write Zig-Logo\r\n");
     try ssd1306.setMemoryAddressingMode(.horizontal);
     try ssd1306.setColumnAddress(16, 111);
     try ssd1306.setPageAddress(1, 6);
-
     const zig_logo = @embedFile("zig_logo.pbm");
     const zig_img = zig_logo[9..]; // Ignore pbm metadata
 
@@ -48,9 +55,10 @@ pub fn main() !void {
             }
         }
     }
-    busyloop(1_000_000);
-    try ssd1306.continuousHorizontalScrollSetup(.right, 1, 6, 0b110);
-    try ssd1306.setVerticalScrollArea(16, 111);
+    try uart.writer().writeAll("Setup scrolling\r\n");
+    try ssd1306.deactivateScroll();
+    try ssd1306.continuousHorizontalScrollSetup(.right, 1, 6, 0b111);
+    try ssd1306.setVerticalScrollArea(8, 48);
     try ssd1306.activateScroll();
 
     // try ssd1306.entireDisplayOn(.resumeToRam);
@@ -61,7 +69,7 @@ pub fn main() !void {
     try uart.writer().writeAll("Loop\r\n");
     while (true) {
         try ssd1306.setContrast(contrast);
-        contrast = if (contrast == 255) 10 else 255;
+        contrast = if (contrast == 255) 128 else 255;
         // try ssd1306.wt.writeAll(&[_]u8{ 0x40, 0x00 });
         busyloop(1_000_000);
     }

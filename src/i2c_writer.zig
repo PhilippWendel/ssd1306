@@ -22,6 +22,7 @@ const I2CWriterStruct = struct {
         var wt = try ssd1306.start_transfer(.write);
         try wt.writer().writeAll(data);
         wt.stop() catch {};
+        busyloop(10); // Delay because it makes stuff magically work
         return data.len;
     }
 
@@ -29,3 +30,10 @@ const I2CWriterStruct = struct {
         return .{ .context = self };
     }
 };
+
+fn busyloop(limit: u24) void {
+    var i: u24 = 0;
+    while (i < limit) : (i += 1) {
+        asm volatile ("nop");
+    }
+}
